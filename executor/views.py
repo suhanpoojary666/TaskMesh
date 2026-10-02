@@ -42,7 +42,7 @@ def create_task(request):
         "status":task.status
     },status=200)
 
-
+#task info for a given task_id
 @api_view(["GET"])
 def task_info(request,task_id):
 
@@ -52,6 +52,7 @@ def task_info(request,task_id):
 
     return Response(serializer.data)
 
+#task attempts info for a given task_id
 @api_view(["GET"])
 def task_attempts_info(request,task_id):
 
@@ -62,3 +63,36 @@ def task_attempts_info(request,task_id):
     serializer = TaskAttemptSerializer(attempts, many=True)
 
     return Response(serializer.data)
+
+@api_view(["GET"])
+def task_list(request):
+
+    tasks=Task.objects.all().order_by('created_at')
+
+    serializer=TaskResponseSerializer(tasks,many=True)
+
+    return Response(serializer.data)
+
+#retry the task if dead/failed
+@api_view(["POST"])
+def retry_task(request,task_id):
+
+    task=get_object_or_404(Task,id=task_id)
+
+    if task.status!=Task.Status.DEAD and task.status!=Task.Status.FAILED:
+        return Response({
+            "message":"cannot retry task (not dead/failed)"
+        },status=400)
+
+    #change the status to QUEUED
+    task.status=Task.Status.QUEUED
+
+    task.save();
+
+    #repush the task into the redis queue
+    redis_client.rpush("taskmesh:queue",str(task.id))
+
+    return Response({
+        "id": task.id,
+        "status": task.status
+    })

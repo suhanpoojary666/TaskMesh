@@ -109,12 +109,14 @@ def cancel_task(request,task_id):
             "messege":"Task cannot be canceled"
         })
 
+    #if is already running(popped from the queue) then set the redis flag to ping the worker to cancel
     if task.status!=Task.Status.QUEUED:
 
         cancel_key = f"taskmesh:cancel:{task.id}"
 
         redis_client.set(cancel_key, "1")
 
+    #mark as cancelled 
     task.status=Task.Status.CANCELLED
 
     task.save()

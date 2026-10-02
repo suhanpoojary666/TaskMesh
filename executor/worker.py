@@ -20,6 +20,7 @@ while True:
 
         task.save()
 
+        #task has been cancelled, skip the execution
         if task.status == Task.Status.CANCELLED:
             print(f"Task {task.id} was cancelled. Skipping.")
             continue
@@ -32,9 +33,11 @@ while True:
 
         while task.status!=Task.Status.SUCCESS and attempts<max_retries:
 
+            #check if the task has been cancelled through redis flag
             if redis_client.get(cancel_key):
                         print(f"Task {task.id} was cancelled. Skipping.")
                         task.status = Task.Status.CANCELLED
+                        redis_client.delete(cancel_key)
                         break
             
             attempts=attempts+1

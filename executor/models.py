@@ -35,3 +35,20 @@ class Task(models.Model):
     attempts = models.IntegerField(default=0)
 
     max_retries = models.IntegerField(default=3)
+
+#info about each attempt of the task
+class TaskAttempt(models.Model):
+    #foregin key is the instance of Task model
+    task = models.ForeignKey(Task, on_delete=models.CASCADE)
+
+    attempt_number = models.IntegerField()
+
+    status = models.CharField(max_length=20)
+
+    response_status = models.IntegerField(null=True)
+
+    duration = models.FloatField(null=True)
+
+    error = models.TextField(null=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)

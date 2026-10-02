@@ -1,9 +1,10 @@
-from django.shortcuts import render
+from django.shortcuts import get_object_or_404, render
 from .models import *
 from .serializers import *
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
 from .redis_client import redis_client
+
 
 
 # Create your views here.
@@ -42,5 +43,22 @@ def create_task(request):
     },status=200)
 
 
+@api_view(["GET"])
+def task_info(request,task_id):
 
+    task = get_object_or_404(Task, id=task_id)  #returns the instance of Task where id=task_id or returns 404 if not found
 
+    serializer = TaskResponseSerializer(task)   
+
+    return Response(serializer.data)
+
+@api_view(["GET"])
+def task_attempts_info(request,task_id):
+
+    task = get_object_or_404(Task, id=task_id)  #returns the instance of Task where id=task_id or returns 404 if not found
+
+    attempts = TaskAttempt.objects.filter(task=task)  #get all the attempts related to the instance task of Task
+
+    serializer = TaskAttemptSerializer(attempts, many=True)
+
+    return Response(serializer.data)

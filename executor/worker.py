@@ -1,15 +1,14 @@
 
 import httpx
 import os,django
-import redis
+import redis,time
 
 #specify the django-setup for the standalone worker
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "taskmesh.settings")
 django.setup()
 
 from .redis_client import redis_client
-from .models import Task
-
+from .models import Task,TaskAttempt
 
 while True:
     try:
@@ -24,6 +23,7 @@ while True:
         while task.status!=Task.Status.SUCCESS and attempts<max_retries:
 
             attempts=attempts+1
+            attempt_start_time=time.perf_counter()  #record the attempt start time
 
             try:
 
@@ -36,12 +36,50 @@ while True:
                 if 200<=response.status_code<300:
                     task.status=Task.Status.SUCCESS
 
+                    #register the attempt info
+                    TaskAttempt.objects.create(
+                        task=task,
+                        attempt_number=attempts,
+                        status="SUCCESS",
+                        response_status=response.status_code,
+                        error=None,
+                        duration=time.perf_counter()-attempt_start_time 
+                    )
+
                 else:
                     task.status=Task.Status.FAILED
 
-            except:
+                    #register the attempt info
+                    TaskAttempt.objects.create(
+                        task=task,
+                        attempt_number=attempts,
+                        status="FAILED",
+                        response_status=response.status_code,
+                        error=None,
+                        duration=time.perf_counter()-attempt_start_time 
+                    )
+
+                    delay=2**(attempts)   #exponential delay after every attempt
+                    time.sleep(delay)
+                    print(f"attempt={attempts} with delay={delay}")
+
+            except Exception as e:
 
                 task.status=Task.Status.FAILED
+
+                #register the attempt info
+                TaskAttempt.objects.create(
+                    task=task,
+                    attempt_number=attempts,
+                    status="FAILED",
+                    response_status=None,
+                    error=str(e),
+                    duration=time.perf_counter()-attempt_start_time 
+                )
+
+                delay=2**(attempts)   #exponential delay after every attempt
+                time.sleep(delay)
+                print(f"attempt={attempts} with delay={delay}")
 
         if task.status==Task.Status.FAILED:
             task.status=Task.Status.DEAD

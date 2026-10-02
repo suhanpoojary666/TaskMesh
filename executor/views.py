@@ -79,20 +79,47 @@ def retry_task(request,task_id):
 
     task=get_object_or_404(Task,id=task_id)
 
-    if task.status!=Task.Status.DEAD and task.status!=Task.Status.FAILED:
+    if task.status!=Task.Status.DEAD and task.status!=Task.Status.FAILED and task.status!=Task.Status.CANCELLED:
         return Response({
-            "message":"cannot retry task (not dead/failed)"
+            "message":"cannot retry task (not dead/failed/cancelled)"
         },status=400)
 
-    #change the status to QUEUED
+    #change the status to QUEUED and attemps to 0
     task.status=Task.Status.QUEUED
+    task.attempts=0;
 
-    task.save();
+    task.save()
 
     #repush the task into the redis queue
     redis_client.rpush("taskmesh:queue",str(task.id))
 
     return Response({
         "id": task.id,
+        "status": task.status
+    })
+
+@api_view(["POST"])
+def cancel_task(request,task_id):
+
+    task=get_object_or_404(Task,id=task_id)
+
+    if task.status in [Task.Status.FAILED,Task.Status.DEAD,Task.Status.CANCELLED]:
+
+        return Response({
+            "messege":"Task cannot be canceled"
+        })
+
+    if task.status!=Task.Status.QUEUED:
+
+        cancel_key = f"taskmesh:cancel:{task.id}"
+
+        redis_client.set(cancel_key, "1")
+
+    task.status=Task.Status.CANCELLED
+
+    task.save()
+
+    return Response({
+        "id": str(task.id),
         "status": task.status
     })

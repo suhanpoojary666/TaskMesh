@@ -16,12 +16,27 @@ while True:
 
         task=Task.objects.get(id=task_id)    #retrive the task info from database
 
+        task.status=Task.Status.RUNNING
+
+        task.save()
+
+        if task.status == Task.Status.CANCELLED:
+            print(f"Task {task.id} was cancelled. Skipping.")
+            continue
+
+        cancel_key = f"taskmesh:cancel:{task.id}"
+
         attempts = 0
         max_retries = task.max_retries
         print(max_retries)
 
         while task.status!=Task.Status.SUCCESS and attempts<max_retries:
 
+            if redis_client.get(cancel_key):
+                        print(f"Task {task.id} was cancelled. Skipping.")
+                        task.status = Task.Status.CANCELLED
+                        break
+            
             attempts=attempts+1
             attempt_start_time=time.perf_counter()  #record the attempt start time
 

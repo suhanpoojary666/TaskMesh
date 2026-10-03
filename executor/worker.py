@@ -48,7 +48,8 @@ while True:
                 response = httpx.request(      #execute the task
                     method=task.method,
                     url=task.callback_url,
-                    json=task.payload
+                    json=task.payload,
+                    timeout=task.timeout
                     )
                 
                 if 200<=response.status_code<300:
@@ -61,7 +62,9 @@ while True:
                         status="SUCCESS",
                         response_status=response.status_code,
                         error=None,
-                        duration=time.perf_counter()-attempt_start_time 
+                        duration=time.perf_counter()-attempt_start_time,
+                        #if the json response is recived from the callback url store it else None
+                        response_body=response.json() if response.content else None
                     )
 
                 else:
@@ -72,9 +75,10 @@ while True:
                         task=task,
                         attempt_number=attempts,
                         status="FAILED",
-                        response_status=response.status_code,
+                        response_status=response.status_code ,
                         error=None,
-                        duration=time.perf_counter()-attempt_start_time 
+                        duration=time.perf_counter()-attempt_start_time,
+                        response_body=response.json() if response.content else None
                     )
 
                     delay=2**(attempts)   #exponential delay after every attempt
@@ -92,7 +96,8 @@ while True:
                     status="FAILED",
                     response_status=None,
                     error=str(e),
-                    duration=time.perf_counter()-attempt_start_time 
+                    duration=time.perf_counter()-attempt_start_time,
+                    response_body =None 
                 )
 
                 delay=2**(attempts)   #exponential delay after every attempt

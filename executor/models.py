@@ -1,5 +1,6 @@
 from django.db import models
 import uuid
+from django.contrib.auth.models import User
 
 # Create your models here.
 class Task(models.Model):
@@ -37,6 +38,9 @@ class Task(models.Model):
 
     max_retries = models.IntegerField(default=3)
 
+    #Max time of wait for the response from the callback url to prevent indefinite waiting time.
+    timeout = models.IntegerField(default=10)
+
 #info about each attempt of the task
 class TaskAttempt(models.Model):
     #foregin key is the instance of Task model
@@ -53,3 +57,17 @@ class TaskAttempt(models.Model):
     error = models.TextField(null=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
+
+    #response from the callback url
+    response_body = models.JSONField(null=True, blank=True)
+
+
+# class APIKey(models.Model):
+
+#     key=models.CharField(max_length=64, unique=True)
+
+#     user=models.ForeignKey(User,on_delete=models.CASCADE)
+
+#     created_at=models.DateTimeField(auto_now_add=True)
+
+#     is_active=models.BooleanField(defult=True)

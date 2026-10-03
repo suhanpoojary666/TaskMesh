@@ -25,7 +25,11 @@ def create_task(request):
 
     task=Task(callback_url=data["callback_url"],
         method=data["method"],
-        payload=data["payload"])
+        payload=data["payload"],
+        )
+
+    if "timeout" in data:
+        task.timeout=data["timeout"]
 
     if "max_retries" in data:
         task.max_retries=data["max_retries"]

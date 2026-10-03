@@ -12,6 +12,7 @@ class TaskCreateSerializer(serializers.ModelSerializer):
             "method",
             "payload",
             "max_retries",
+            "timeout",
         ]
 
 #use this to send the json data related to the task
@@ -28,6 +29,7 @@ class TaskResponseSerializer(serializers.ModelSerializer):
             "updated_at",
             "max_retries",
             "attempts",
+            "timeout",
         ]
 
 #use this to send the json data related to the individual attempts
@@ -42,4 +44,5 @@ class TaskAttemptSerializer(serializers.ModelSerializer):
             "duration",
             "error",
             "created_at",
+            "response_body"
         ]

@@ -4,7 +4,7 @@ from .serializers import *
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
 from .redis_client import redis_client
-
+from django.utils import timezone
 
 
 # Create your views here.
@@ -23,9 +23,33 @@ def create_task(request):
 
     data=serializer.validated_data
 
-    task=Task(callback_url=data["callback_url"],
+    if data.get("scheduled_at") and data["scheduled_at"] > timezone.now():
+
+        task=Task(callback_url=data["callback_url"],
+            method=data["method"],
+            payload=data["payload"],
+            scheduled_at=data["scheduled_at"],
+            status=Task.Status.SCHEDULED
+        )
+
+        if "timeout" in data:
+                task.timeout=data["timeout"]
+        
+        if "max_retries" in data:
+                task.max_retries=data["max_retries"]
+
+        task.save()
+
+        return Response({
+                "id":task.id,
+                "status":task.status
+            },status=200)
+
+
+    task=Task(callback_url=data["callback_url"], 
         method=data["method"],
         payload=data["payload"],
+        status=Task.Status.QUEUED
         )
 
     if "timeout" in data:

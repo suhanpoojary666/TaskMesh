@@ -3,6 +3,7 @@ import httpx
 import os,django
 import redis,time
 from django.utils import timezone
+from datetime import timedelta
 
 #specify the django-setup for the standalone worker
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "taskmesh.settings")
@@ -17,22 +18,23 @@ while True:
 
         task=Task.objects.get(id=task_id)    #retrive the task info from database
 
+        if task.status==Task.Status.CANCELLED or task.status==Task.Status.SUCCESS:
+             continue  #if the task was cancelled
+
+        #lock the task for execution by this worker
+        task.lease =timezone.now()+timedelta(seconds=task.timeout+30) #the worker can have the lock for timeout+30sec for each task
+
         task.status=Task.Status.RUNNING
 
         task.save()
 
-        #task has been cancelled, skip the execution
-        if task.status == Task.Status.CANCELLED:
-            print(f"Task {task.id} was cancelled. Skipping.")
-            continue
-
         cancel_key = f"taskmesh:cancel:{task.id}"
 
-        attempts = 0
+        attempts = TaskAttempt.objects.filter(task=task).count()    #retuns the number of logs for this task in taskattempt table
         max_retries = task.max_retries
-        print(max_retries)
+        print(f"max_retries= {max_retries}")
 
-        while task.status!=Task.Status.SUCCESS and attempts<max_retries:
+        while task.status!=Task.Status.SUCCESS and attempts<max_retries+1:
 
             #check if the task has been cancelled through redis flag
             if redis_client.get(cancel_key):
@@ -42,7 +44,7 @@ while True:
                         break
             
             attempts=attempts+1
-            attempt_start_time=time.perf_counter()  #record the attempt start time
+            attempt_start_time=time.perf_counter()  #record the attempt start time 
 
             try:
 
@@ -63,10 +65,10 @@ while True:
                         status="SUCCESS",
                         response_status=response.status_code,
                         error=None,
-                        duration=time.perf_counter()-attempt_start_time,
-                        #if the json response is recived from the callback url store it else None
-                        response_body=response.json() if response.content else None
+                        duration=time.perf_counter() - attempt_start_time,
+                        response_body=None,
                     )
+                    print(f"LOG CREATED: task={task.id}, attempt={attempts}")
 
                 else:
                     task.status=Task.Status.FAILED
@@ -76,18 +78,18 @@ while True:
                         task=task,
                         attempt_number=attempts,
                         status="FAILED",
-                        response_status=response.status_code ,
+                        response_status=response.status_code,
                         error=None,
-                        duration=time.perf_counter()-attempt_start_time,
-                        response_body=response.json() if response.content else None
+                        duration=time.perf_counter() - attempt_start_time,
+                        response_body=None,
                     )
 
                     delay=2**(attempts)   #exponential delay after every attempt
-                    time.sleep(delay)
                     print(f"attempt={attempts} with delay={delay}")
+                    time.sleep(delay)
+                    
 
             except Exception as e:
-
                 task.status=Task.Status.FAILED
 
                 #register the attempt info
@@ -97,18 +99,19 @@ while True:
                     status="FAILED",
                     response_status=None,
                     error=str(e),
-                    duration=time.perf_counter()-attempt_start_time,
-                    response_body =None 
+                    duration=time.perf_counter() - attempt_start_time,
+                    response_body=None,
                 )
-
                 delay=2**(attempts)   #exponential delay after every attempt
-                time.sleep(delay)
                 print(f"attempt={attempts} with delay={delay}")
+                time.sleep(delay)
+                
 
         if task.status==Task.Status.FAILED:
             task.status=Task.Status.DEAD
 
         task.attempts=attempts
+        task.lease=None  #release the lock on the task
         print(f"Task {task.id} completed with status: {task.status} after {attempts} attempts.")
         task.save()
 

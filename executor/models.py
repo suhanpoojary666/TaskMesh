@@ -41,10 +41,10 @@ class Task(models.Model):
     #Max time of wait for the response from the callback url to prevent indefinite waiting time.
     timeout = models.IntegerField(default=10)
 
-    scheduled_at = models.DateTimeField(
-        null=True,
-        blank=True
-    )
+    scheduled_at = models.DateTimeField(null=True,blank=True)
+
+    #used for recovery of task when a worker locks the task and dies
+    lease = models.DateTimeField(null=True,blank=True)
 
 #info about each attempt of the task
 class TaskAttempt(models.Model):
@@ -65,6 +65,7 @@ class TaskAttempt(models.Model):
 
     #response from the callback url
     response_body = models.JSONField(null=True, blank=True)
+
 
 
 # class APIKey(models.Model):

@@ -131,7 +131,7 @@ def cancel_task(request,task_id):
 
     task=get_object_or_404(Task,id=task_id)
 
-    if task.status in [Task.Status.FAILED,Task.Status.DEAD,Task.Status.CANCELLED]:
+    if task.status in [Task.Status.FAILED,Task.Status.DEAD,Task.Status.CANCELLED,Task.Status.SUCCESS]:
 
         return Response({
             "messege":"Task cannot be canceled"

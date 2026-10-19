@@ -25,8 +25,7 @@ while True:
         for task in expired_tasks:
 
             with transaction.atomic():
-                task = Task.objects.select_for_update().get(id=task.id)
-
+                
                 task=Task.objects.select_for_update().get(id=task.id)  #refresh queryset to get the latest status of the task
 
                 attempt_count = TaskAttempt.objects.filter(task=task).count()

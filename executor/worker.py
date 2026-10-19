@@ -4,6 +4,7 @@ import os,django
 import redis,time
 from django.utils import timezone
 from datetime import timedelta
+from django.db import transaction
 
 #specify the django-setup for the standalone worker
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "taskmesh.settings")
@@ -16,104 +17,106 @@ while True:
     try:
         task_id=redis_client.blpop('taskmesh:queue')[1]     #get task id from redis
 
-        task=Task.objects.get(id=task_id)    #retrive the task info from database
+        with transaction.atomic():
 
-        if task.status==Task.Status.CANCELLED or task.status==Task.Status.SUCCESS:
-             continue  #if the task was cancelled
+                task = Task.objects.select_for_update().get(id=task_id)    #retrive the task info from database and locks it from other workers(atomic transaction)
 
-        #lock the task for execution by this worker
-        task.lease =timezone.now()+timedelta(seconds=task.timeout+30) #the worker can have the lock for timeout+30sec for each task
+                if task.status==Task.Status.CANCELLED or task.status==Task.Status.SUCCESS  or task.status==Task.Status.RUNNING:
+                    continue  #if the task was cancelled
 
-        task.status=Task.Status.RUNNING
+                #lock the task for execution by this worker
+                task.lease =timezone.now()+timedelta(seconds=task.timeout+30) #the worker can have the lock for timeout+30sec for each task
 
-        task.save()
+                task.status=Task.Status.RUNNING
 
-        cancel_key = f"taskmesh:cancel:{task.id}"
+                task.save()
 
-        attempts = TaskAttempt.objects.filter(task=task).count()    #retuns the number of logs for this task in taskattempt table
-        max_retries = task.max_retries
-        print(f"max_retries= {max_retries}")
+                cancel_key = f"taskmesh:cancel:{task.id}"
 
-        while task.status!=Task.Status.SUCCESS and attempts<max_retries+1:
+                attempts = TaskAttempt.objects.filter(task=task).count()    #retuns the number of logs for this task in taskattempt table
+                max_retries = task.max_retries
+                print(f"max_retries= {max_retries}")
 
-            #check if the task has been cancelled through redis flag
-            if redis_client.get(cancel_key):
-                        print(f"Task {task.id} was cancelled. Skipping.")
-                        task.status = Task.Status.CANCELLED
-                        redis_client.delete(cancel_key)
-                        break
-            
-            attempts=attempts+1
-            attempt_start_time=time.perf_counter()  #record the attempt start time 
+                while task.status!=Task.Status.SUCCESS and attempts<max_retries+1:
 
-            try:
-
-                response = httpx.request(      #execute the task
-                    method=task.method,
-                    url=task.callback_url,
-                    json=task.payload,
-                    timeout=task.timeout
-                    )
-                
-                if 200<=response.status_code<300:
-                    task.status=Task.Status.SUCCESS
-
-                    #register the attempt info
-                    TaskAttempt.objects.create(
-                        task=task,
-                        attempt_number=attempts,
-                        status="SUCCESS",
-                        response_status=response.status_code,
-                        error=None,
-                        duration=time.perf_counter() - attempt_start_time,
-                        response_body=None,
-                    )
-                    print(f"LOG CREATED: task={task.id}, attempt={attempts}")
-
-                else:
-                    task.status=Task.Status.FAILED
-
-                    #register the attempt info
-                    TaskAttempt.objects.create(
-                        task=task,
-                        attempt_number=attempts,
-                        status="FAILED",
-                        response_status=response.status_code,
-                        error=None,
-                        duration=time.perf_counter() - attempt_start_time,
-                        response_body=None,
-                    )
-
-                    delay=2**(attempts)   #exponential delay after every attempt
-                    print(f"attempt={attempts} with delay={delay}")
-                    time.sleep(delay)
+                    #check if the task has been cancelled through redis flag
+                    if redis_client.get(cancel_key):
+                                print(f"Task {task.id} was cancelled. Skipping.")
+                                task.status = Task.Status.CANCELLED
+                                redis_client.delete(cancel_key)
+                                break
                     
+                    attempts=attempts+1
+                    attempt_start_time=time.perf_counter()  #record the attempt start time 
 
-            except Exception as e:
-                task.status=Task.Status.FAILED
+                    try:
 
-                #register the attempt info
-                TaskAttempt.objects.create(
-                    task=task,
-                    attempt_number=attempts,
-                    status="FAILED",
-                    response_status=None,
-                    error=str(e),
-                    duration=time.perf_counter() - attempt_start_time,
-                    response_body=None,
-                )
-                delay=2**(attempts)   #exponential delay after every attempt
-                print(f"attempt={attempts} with delay={delay}")
-                time.sleep(delay)
-                
+                        response = httpx.request(      #execute the task
+                            method=task.method,
+                            url=task.callback_url,
+                            json=task.payload,
+                            timeout=task.timeout
+                            )
+                        
+                        if 200<=response.status_code<300:
+                            task.status=Task.Status.SUCCESS
 
-        if task.status==Task.Status.FAILED:
-            task.status=Task.Status.DEAD
+                            #register the attempt info
+                            TaskAttempt.objects.create(
+                                task=task,
+                                attempt_number=attempts,
+                                status="SUCCESS",
+                                response_status=response.status_code,
+                                error=None,
+                                duration=time.perf_counter() - attempt_start_time,
+                                response_body=None,
+                            )
+                            print(f"LOG CREATED: task={task.id}, attempt={attempts}")
 
-        task.attempts=attempts
-        task.lease=None  #release the lock on the task
-        print(f"Task {task.id} completed with status: {task.status} after {attempts} attempts.")
-        task.save()
+                        else:
+                            task.status=Task.Status.FAILED
+
+                            #register the attempt info
+                            TaskAttempt.objects.create(
+                                task=task,
+                                attempt_number=attempts,
+                                status="FAILED",
+                                response_status=response.status_code,
+                                error=None,
+                                duration=time.perf_counter() - attempt_start_time,
+                                response_body=None,
+                            )
+
+                            delay=2**(attempts)   #exponential delay after every attempt
+                            print(f"attempt={attempts} with delay={delay}")
+                            time.sleep(delay)
+                            
+
+                    except Exception as e:
+                        task.status=Task.Status.FAILED
+
+                        #register the attempt info
+                        TaskAttempt.objects.create(
+                            task=task,
+                            attempt_number=attempts,
+                            status="FAILED",
+                            response_status=None,
+                            error=str(e),
+                            duration=time.perf_counter() - attempt_start_time,
+                            response_body=None,
+                        )
+                        delay=2**(attempts)   #exponential delay after every attempt
+                        print(f"attempt={attempts} with delay={delay}")
+                        time.sleep(delay)
+                        
+
+                if task.status==Task.Status.FAILED:
+                    task.status=Task.Status.DEAD
+
+                task.attempts=attempts
+                task.lease=None  #release the lock on the task
+                print(f"Task {task.id} completed with status: {task.status} after {attempts} attempts.")
+                task.save()
 
     except redis.exceptions.TimeoutError:
         continue #if there is not task redis times out after 5sec but the worker should continue

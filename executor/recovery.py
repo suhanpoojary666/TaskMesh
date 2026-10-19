@@ -22,18 +22,23 @@ while True:
                 lease__lte=now
             )
 
+        print("Recovery running. Checking expired tasks...")
+
+
         for task in expired_tasks:
 
             with transaction.atomic():
-                
+
                 task=Task.objects.select_for_update().get(id=task.id)  #refresh queryset to get the latest status of the task
 
                 attempt_count = TaskAttempt.objects.filter(task=task).count()
 
+                print(f"Task {task.id} has expired. Attempt count: {attempt_count}")
+
                 if task.status != Task.Status.RUNNING or task.lease is None or task.lease > timezone.now():
                             continue  #recheck
-
-
+                
+                print(f"Task {task.id} has expired. Attempt count: {attempt_count}")
                 #attemps are remaining, requeue the task for execution
                 if attempt_count < task.max_retries+1:
 

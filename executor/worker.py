@@ -31,92 +31,92 @@ while True:
 
                 task.save()
 
-                cancel_key = f"taskmesh:cancel:{task.id}"
+        cancel_key = f"taskmesh:cancel:{task.id}"
 
-                attempts = TaskAttempt.objects.filter(task=task).count()    #retuns the number of logs for this task in taskattempt table
-                max_retries = task.max_retries
-                print(f"max_retries= {max_retries}")
+        attempts = TaskAttempt.objects.filter(task=task).count()    #retuns the number of logs for this task in taskattempt table
+        max_retries = task.max_retries
+        print(f"max_retries= {max_retries}")
 
-                while task.status!=Task.Status.SUCCESS and attempts<max_retries+1:
+        while task.status!=Task.Status.SUCCESS and attempts<max_retries+1:
 
-                    #check if the task has been cancelled through redis flag
-                    if redis_client.get(cancel_key):
-                                print(f"Task {task.id} was cancelled. Skipping.")
-                                task.status = Task.Status.CANCELLED
-                                redis_client.delete(cancel_key)
-                                break
+            #check if the task has been cancelled through redis flag
+            if redis_client.get(cancel_key):
+                        print(f"Task {task.id} was cancelled. Skipping.")
+                        task.status = Task.Status.CANCELLED
+                        redis_client.delete(cancel_key)
+                        break
+            
+            attempts=attempts+1
+            attempt_start_time=time.perf_counter()  #record the attempt start time 
+
+            try:
+
+                response = httpx.request(      #execute the task
+                    method=task.method,
+                    url=task.callback_url,
+                    json=task.payload,
+                    timeout=task.timeout
+                    )
+                
+                if 200<=response.status_code<300:
+                    task.status=Task.Status.SUCCESS
+
+                    #register the attempt info
+                    TaskAttempt.objects.create(
+                        task=task,
+                        attempt_number=attempts,
+                        status="SUCCESS",
+                        response_status=response.status_code,
+                        error=None,
+                        duration=time.perf_counter() - attempt_start_time,
+                        response_body=None,
+                    )
+                    print(f"LOG CREATED: task={task.id}, attempt={attempts}")
+
+                else:
+                    task.status=Task.Status.FAILED
+
+                    #register the attempt info
+                    TaskAttempt.objects.create(
+                        task=task,
+                        attempt_number=attempts,
+                        status="FAILED",
+                        response_status=response.status_code,
+                        error=None,
+                        duration=time.perf_counter() - attempt_start_time,
+                        response_body=None,
+                    )
+
+                    delay=2**(attempts)   #exponential delay after every attempt
+                    print(f"attempt={attempts} with delay={delay}")
+                    time.sleep(delay)
                     
-                    attempts=attempts+1
-                    attempt_start_time=time.perf_counter()  #record the attempt start time 
 
-                    try:
+            except Exception as e:
+                task.status=Task.Status.FAILED
 
-                        response = httpx.request(      #execute the task
-                            method=task.method,
-                            url=task.callback_url,
-                            json=task.payload,
-                            timeout=task.timeout
-                            )
-                        
-                        if 200<=response.status_code<300:
-                            task.status=Task.Status.SUCCESS
+                #register the attempt info
+                TaskAttempt.objects.create(
+                    task=task,
+                    attempt_number=attempts,
+                    status="FAILED",
+                    response_status=None,
+                    error=str(e),
+                    duration=time.perf_counter() - attempt_start_time,
+                    response_body=None,
+                )
+                delay=2**(attempts)   #exponential delay after every attempt
+                print(f"attempt={attempts} with delay={delay}")
+                time.sleep(delay)
+                
 
-                            #register the attempt info
-                            TaskAttempt.objects.create(
-                                task=task,
-                                attempt_number=attempts,
-                                status="SUCCESS",
-                                response_status=response.status_code,
-                                error=None,
-                                duration=time.perf_counter() - attempt_start_time,
-                                response_body=None,
-                            )
-                            print(f"LOG CREATED: task={task.id}, attempt={attempts}")
+        if task.status==Task.Status.FAILED:
+            task.status=Task.Status.DEAD
 
-                        else:
-                            task.status=Task.Status.FAILED
-
-                            #register the attempt info
-                            TaskAttempt.objects.create(
-                                task=task,
-                                attempt_number=attempts,
-                                status="FAILED",
-                                response_status=response.status_code,
-                                error=None,
-                                duration=time.perf_counter() - attempt_start_time,
-                                response_body=None,
-                            )
-
-                            delay=2**(attempts)   #exponential delay after every attempt
-                            print(f"attempt={attempts} with delay={delay}")
-                            time.sleep(delay)
-                            
-
-                    except Exception as e:
-                        task.status=Task.Status.FAILED
-
-                        #register the attempt info
-                        TaskAttempt.objects.create(
-                            task=task,
-                            attempt_number=attempts,
-                            status="FAILED",
-                            response_status=None,
-                            error=str(e),
-                            duration=time.perf_counter() - attempt_start_time,
-                            response_body=None,
-                        )
-                        delay=2**(attempts)   #exponential delay after every attempt
-                        print(f"attempt={attempts} with delay={delay}")
-                        time.sleep(delay)
-                        
-
-                if task.status==Task.Status.FAILED:
-                    task.status=Task.Status.DEAD
-
-                task.attempts=attempts
-                task.lease=None  #release the lock on the task
-                print(f"Task {task.id} completed with status: {task.status} after {attempts} attempts.")
-                task.save()
+        task.attempts=attempts
+        task.lease=None  #release the lock on the task
+        print(f"Task {task.id} completed with status: {task.status} after {attempts} attempts.")
+        task.save()
 
     except redis.exceptions.TimeoutError:
         continue #if there is not task redis times out after 5sec but the worker should continue

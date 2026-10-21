@@ -5,13 +5,41 @@ import redis,time
 from django.utils import timezone
 from datetime import timedelta
 from django.db import transaction
+import uuid
+import threading
 
 #specify the django-setup for the standalone worker
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "taskmesh.settings")
 django.setup()
 
 from .redis_client import redis_client
-from .models import Task,TaskAttempt
+from .models import Task,TaskAttempt,Worker
+
+worker_id = str(uuid.uuid4())  #generate a unique id for the each worker instance
+heartbeat_key = f"taskmesh:worker:{worker_id}:heartbeat"
+
+# Register the worker
+Worker.objects.create(worker_id=worker_id);
+print(f"Worker {worker_id} registered.")
+
+
+#heart-beat function that runs as a seperate thread in worker process
+def send_heartbeat():
+    while True:
+        try:
+            redis_client.set(
+                heartbeat_key,
+                timezone.now().isoformat(),
+                ex=30
+            )
+        except Exception as e:
+            print(f"Heartbeat failed: {e}")
+
+        time.sleep(10)
+
+#start the heart-beat thread
+threading.Thread(target=send_heartbeat, daemon=True).start()
+
 
 while True:
     try:

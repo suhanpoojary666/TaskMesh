@@ -1,3 +1,5 @@
+from unittest import result
+
 from django.shortcuts import get_object_or_404, render
 from .models import *
 from .serializers import *
@@ -153,3 +155,25 @@ def cancel_task(request,task_id):
         "id": str(task.id),
         "status": task.status
     })
+
+@api_view(["GET"])
+def worker_health(request):
+
+     workers = Worker.objects.all()
+
+     result = []
+
+     for worker in workers:
+            
+            key = f"taskmesh:worker:{worker.worker_id}:heartbeat"
+            is_healthy = redis_client.exists(key)
+            last_seen = redis_client.get(key)
+
+            result.append({
+                 "id": str(worker.worker_id),
+                 "registered_at": worker.registered_at,
+                 "status": "HEALTHY" if is_healthy else "DEAD",
+                 "last_seen": last_seen if last_seen else None
+            })
+
+     return Response(result)

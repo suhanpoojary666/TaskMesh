@@ -66,6 +66,13 @@ class TaskAttempt(models.Model):
     #response from the callback url
     response_body = models.JSONField(null=True, blank=True)
 
+#info about each worker instance
+class Worker(models.Model):
+
+    worker_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    registered_at = models.DateTimeField(auto_now_add=True)
+
 
 
 # class APIKey(models.Model):

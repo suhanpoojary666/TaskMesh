@@ -8,5 +8,6 @@ urlpatterns=[
     path('tasks',views.task_list),
     path('tasks/<uuid:task_id>/retry',views.retry_task),
     path('tasks/<uuid:task_id>/cancel',views.cancel_task),
-    path('workers/', views.worker_health)
+    path('workers/', views.worker_health),
+    path('cancel_cron/<uuid:task_id>', views.cancel_cron),
 ]

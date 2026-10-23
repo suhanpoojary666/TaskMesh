@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from rest_framework.decorators import api_view
 from .redis_client import redis_client
 from django.utils import timezone
+from croniter import croniter
 
 
 # Create your views here.
@@ -25,12 +26,12 @@ def create_task(request):
 
     data=serializer.validated_data
 
-    if data.get("scheduled_at") and data["scheduled_at"] > timezone.now():
+    if (data.get("scheduled_at") and data["scheduled_at"] > timezone.now()) or data.get("cron_expression"):
 
         task=Task(callback_url=data["callback_url"],
             method=data["method"],
             payload=data["payload"],
-            scheduled_at=data["scheduled_at"],
+            scheduled_at=data["scheduled_at"] if data.get("scheduled_at") else croniter(data["cron_expression"],timezone.now()).get_next(timezone.datetime),
             status=Task.Status.SCHEDULED
         )
 
@@ -39,6 +40,10 @@ def create_task(request):
         
         if "max_retries" in data:
                 task.max_retries=data["max_retries"]
+
+        if "cron_expression" in data:
+                task.cron_expression=data["cron_expression"]
+                task.parent_task=task
 
         task.save()
 
@@ -177,3 +182,26 @@ def worker_health(request):
             })
 
      return Response(result)
+
+@api_view(["POST"])
+def cancel_cron(request,task_id):
+
+    task=get_object_or_404(Task,id=task_id)
+
+    if task.cron_expression is None:
+            
+            return Response({
+                "message":"Task is not a cron job"
+            },status=400)
+
+    update_task=Task.objects.filter(parent_task=task,status=Task.Status.SCHEDULED).update(status=Task.Status.CANCELLED)
+
+    if update_task==0:
+        return Response({
+            "message":f"cron job with parent task id {task_id} has already been terminated"
+        })
+
+    return Response({
+        "message":f"cron job with parent task id {task_id} terminated successfully"
+    })
+

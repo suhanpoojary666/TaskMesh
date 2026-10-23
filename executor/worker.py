@@ -1,6 +1,3 @@
-
-from socket import timeout
-
 import httpx
 import os,django
 import redis,time
@@ -101,7 +98,7 @@ while True:
                         response_status=response.status_code,
                         error=None,
                         duration=time.perf_counter() - attempt_start_time,
-                        response_body=None,
+                        response_body=response.text if response.text else None,
                     )
                     print(f"LOG CREATED: task={task.id}, attempt={attempts}")
 

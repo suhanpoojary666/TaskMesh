@@ -46,6 +46,12 @@ class Task(models.Model):
     #used for recovery of task when a worker locks the task and dies
     lease = models.DateTimeField(null=True,blank=True)
 
+    #cron expression for scheduling the task
+    cron_expression = models.CharField(max_length=100,null=True,blank=True)
+
+    #stores the parent task that triggered the cron chain
+    parent_task = models.ForeignKey("self",null=True,blank=True,on_delete=models.CASCADE,related_name="scheduled_tasks")
+
 #info about each attempt of the task
 class TaskAttempt(models.Model):
     #foregin key is the instance of Task model

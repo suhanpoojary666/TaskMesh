@@ -14,7 +14,8 @@ class TaskCreateSerializer(serializers.ModelSerializer):
             "max_retries",
             "timeout",
             "scheduled_at",
-            "cron_expression"
+            "cron_expression",
+            "priority"
         ]
 
 #use this to send the json data related to the task
@@ -34,7 +35,8 @@ class TaskResponseSerializer(serializers.ModelSerializer):
             "timeout",
             "scheduled_at",
             "cron_expression",
-            "parent_task"
+            "parent_task",
+            "priority"
         ]
 
 #use this to send the json data related to the individual attempts

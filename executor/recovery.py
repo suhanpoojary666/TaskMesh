@@ -10,8 +10,6 @@ django.setup()
 from executor.models import Task,TaskAttempt
 from executor.redis_client import redis_client
 
-key="taskmesh:queue"
-
 
 while True:
 
@@ -50,7 +48,7 @@ while True:
 
                     task.save()
 
-                    redis_client.rpush(key, str(task.id))
+                    redis_client.rpush(f"taskmesh:queue:{task.priority}", str(task.id))
 
                 # worker died when no more attempts were remaining, mark the task as DEAD
                 else:

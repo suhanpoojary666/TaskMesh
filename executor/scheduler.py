@@ -9,8 +9,6 @@ django.setup()
 from executor.models import Task
 from executor.redis_client import redis_client
 
-key="taskmesh:queue"
-
 while True:
     
         now=timezone.now()
@@ -27,7 +25,7 @@ while True:
 
             print(f"task:{task.id} is scheduled for execution")
 
-            redis_client.rpush(key,str(task.id))
+            redis_client.rpush(f"taskmesh:queue:{task.priority}", str(task.id))
 
             task.status=Task.Status.QUEUED
 
@@ -46,7 +44,8 @@ while True:
                       timeout=task.timeout,
                       max_retries=task.max_retries,
                       cron_expression=task.cron_expression,
-                      parent_task=task.parent_task
+                      parent_task=task.parent_task,
+                      priority=task.priority
                   )
 
             print(f"task:{task.id} is queued")

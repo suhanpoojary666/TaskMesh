@@ -42,7 +42,11 @@ threading.Thread(target=send_heartbeat, daemon=True).start()
 
 while True:
     try:
-        task_id=redis_client.blpop('taskmesh:queue')[1]     #get task id from redis
+
+        task_id=redis_client.blpop(
+         ["taskmesh:queue:1",
+          "taskmesh:queue:2",
+          "taskmesh:queue:3"],timeout=0)[1]    #get task id from redis based on priroty(1=high,2=medium,3=low)
 
         with transaction.atomic():
 

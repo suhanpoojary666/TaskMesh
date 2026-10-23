@@ -52,6 +52,12 @@ class Task(models.Model):
     #stores the parent task that triggered the cron chain
     parent_task = models.ForeignKey("self",null=True,blank=True,on_delete=models.CASCADE,related_name="scheduled_tasks")
 
+    priority = models.IntegerField(default=2,choices=[
+        (1, "High"),
+        (2, "Medium"),
+        (3, "Low"),
+    ],) # 1=high, 2=medium, 3=low
+
 #info about each attempt of the task
 class TaskAttempt(models.Model):
     #foregin key is the instance of Task model

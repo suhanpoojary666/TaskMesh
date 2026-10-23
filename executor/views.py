@@ -32,7 +32,8 @@ def create_task(request):
             method=data["method"],
             payload=data["payload"],
             scheduled_at=data["scheduled_at"] if data.get("scheduled_at") else croniter(data["cron_expression"],timezone.now()).get_next(timezone.datetime),
-            status=Task.Status.SCHEDULED
+            status=Task.Status.SCHEDULED,
+            priority=data["priority"] if data.get("priority") else 2
         )
 
         if "timeout" in data:
@@ -56,7 +57,8 @@ def create_task(request):
     task=Task(callback_url=data["callback_url"], 
         method=data["method"],
         payload=data["payload"],
-        status=Task.Status.QUEUED
+        status=Task.Status.QUEUED,
+        priority=data["priority"] if data.get("priority") else 2
         )
 
     if "timeout" in data:
@@ -68,7 +70,7 @@ def create_task(request):
     task.save();
 
     #after saving the task, queue it(it's id) to redis
-    redis_key="taskmesh:queue"
+    redis_key=f"taskmesh:queue:{task.priority}"
     redis_data=str(task.id)
     redis_client.rpush(redis_key,redis_data)
     
@@ -126,7 +128,7 @@ def retry_task(request,task_id):
     task.save()
 
     #repush the task into the redis queue
-    redis_client.rpush("taskmesh:queue",str(task.id))
+    redis_client.rpush(f"taskmesh:queue:{task.priority}", str(task.id))
 
     return Response({
         "id": task.id,

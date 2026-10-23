@@ -55,7 +55,7 @@ while True:
                     continue  #if the task was cancelled
 
                 #lock the task for execution by this worker
-                total_time = (max_retries + 1) * timeout + (2 ** (max_retries + 2) - 2)   #this time includes total time for all attempts(worst=timeout)+total exponential backoff time
+                total_time = (task.max_retries + 1) * task.timeout + (2 ** (task.max_retries + 2) - 2)   #this time includes total time for all attempts(worst=timeout)+total exponential backoff time
                 lease = total_time + 30
                 task.lease =timezone.now()+timedelta(seconds=lease) #the worker can have the lock for the calculated lease duration
 

@@ -1,6 +1,9 @@
 from rest_framework import serializers
 
-from .models import Task,TaskAttempt
+from .models import *
+
+from django.contrib.auth.models import User
+from rest_framework import serializers
 
 #use this to recive the json data while creating the task
 class TaskCreateSerializer(serializers.ModelSerializer):
@@ -36,7 +39,8 @@ class TaskResponseSerializer(serializers.ModelSerializer):
             "scheduled_at",
             "cron_expression",
             "parent_task",
-            "priority"
+            "priority",
+            "retry_from"
         ]
 
 #use this to send the json data related to the individual attempts
@@ -53,3 +57,16 @@ class TaskAttemptSerializer(serializers.ModelSerializer):
             "created_at",
             "response_body"
         ]
+
+class RegisterSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True)
+
+    class Meta:
+        model = User
+        fields = ['username', 'password']
+
+class APIKeySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = APIKey
+        fields = ['id', 'name', 'suffix', 'is_active', 'created_at', 'revoked_at']
+        read_only_fields = ['id', 'suffix', 'is_active', 'created_at', 'revoked_at']

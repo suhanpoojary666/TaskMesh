@@ -58,6 +58,11 @@ class Task(models.Model):
         (3, "Low"),
     ],) # 1=high, 2=medium, 3=low
 
+    retry_from = models.ForeignKey("self", null=True, blank=True, on_delete=models.SET_NULL, related_name="retry_tasks")
+
+    owner = models.ForeignKey(User,on_delete=models.CASCADE,related_name="tasks")
+
+
 #info about each attempt of the task
 class TaskAttempt(models.Model):
     #foregin key is the instance of Task model
@@ -87,12 +92,18 @@ class Worker(models.Model):
 
 
 
-# class APIKey(models.Model):
+class APIKey(models.Model):
+    
+    owner = models.ForeignKey(User,on_delete=models.CASCADE,related_name="api_keys")
 
-#     key=models.CharField(max_length=64, unique=True)
+    name = models.CharField(max_length=100)
 
-#     user=models.ForeignKey(User,on_delete=models.CASCADE)
+    key_hash = models.CharField(max_length=64, unique=True) #the hash value of the key is stored
 
-#     created_at=models.DateTimeField(auto_now_add=True)
+    suffix = models.CharField(max_length=8)
 
-#     is_active=models.BooleanField(defult=True)
+    is_active = models.BooleanField(default=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    revoked_at = models.DateTimeField(null=True, blank=True)

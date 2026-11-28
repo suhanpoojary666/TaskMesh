@@ -1,3 +1,5 @@
+#api_key authentication class for DRF decorator
+
 import hashlib
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
@@ -8,7 +10,6 @@ class APIKeyAuthentication(BaseAuthentication):
     def authenticate(self, request):
 
         api_key=request.headers.get("X-API-Key") #from the http request retrive the api key header
-
 
         if not api_key:
             return None

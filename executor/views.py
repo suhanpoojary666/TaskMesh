@@ -11,12 +11,19 @@ from croniter import croniter
 from rest_framework.permissions import IsAuthenticated
 import secrets,hashlib
 from .authentication import APIKeyAuthentication
+from .ratelimiting import *
 
 
 # Create your views here.
 @api_view(["POST"])
 @authentication_classes([APIKeyAuthentication])
 def create_task(request):
+
+    if not allow_api_key_request(request, 30):
+        return Response(
+            {"detail": "Rate limit exceeded"},
+            status=429
+        )
 
     #recieve the task data from user->serialize->save it to db
     serializer=TaskCreateSerializer(data=request.data)
@@ -89,6 +96,12 @@ def create_task(request):
 @permission_classes([IsAuthenticated])
 def task_info(request,task_id):
 
+    if not allow_user_request(request, 120):
+        return Response(
+            {"detail": "Rate limit exceeded"},
+            status=429
+        )
+
     task = get_object_or_404(Task,owner=request.user,id=task_id)  #returns the instance of Task where id=task_id or returns 404 if not found
 
     serializer = TaskResponseSerializer(task)   
@@ -99,6 +112,12 @@ def task_info(request,task_id):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def task_attempts_info(request,task_id):
+
+    if not allow_user_request(request, 120):
+            return Response(
+                {"detail": "Rate limit exceeded"},
+                status=429
+            )
 
     task = get_object_or_404(Task,owner=request.user,id=task_id)  #returns the instance of Task where id=task_id or returns 404 if not found
 
@@ -112,6 +131,12 @@ def task_attempts_info(request,task_id):
 @permission_classes([IsAuthenticated])
 def task_list(request):
 
+    if not allow_user_request(request, 120):
+            return Response(
+                {"detail": "Rate limit exceeded"},
+                status=429
+            )
+
     tasks=Task.objects.filter(owner=request.user).order_by('created_at')
 
     serializer=TaskResponseSerializer(tasks,many=True)
@@ -122,6 +147,12 @@ def task_list(request):
 @api_view(["POST"])
 @authentication_classes([APIKeyAuthentication])
 def retry_task(request,task_id):
+
+    if not allow_api_key_request(request, 10):
+        return Response(
+            {"detail": "Rate limit exceeded"},
+            status=429
+        )
 
     task=get_object_or_404(Task,id=task_id)
 
@@ -138,7 +169,8 @@ def retry_task(request,task_id):
         max_retries=task.max_retries,
         priority=task.priority,
         status=Task.Status.QUEUED,
-        retry_from=task
+        retry_from=task,
+        owner=request.user
     )
 
     #repush the task into the redis queue
@@ -180,6 +212,12 @@ def cancel_task(request,task_id):
 
 @api_view(["GET"])
 def worker_health(request):
+
+     if not allow_ip_request(request, 120):
+             return Response(
+                 {"detail": "Rate limit exceeded"},
+                 status=429
+             )
 
      workers = Worker.objects.all()
 
@@ -225,6 +263,13 @@ def cancel_cron(request,task_id):
 
 @api_view(['POST'])
 def register(request):
+
+    if not allow_ip_request(request, 10):
+                 return Response(
+                     {"detail": "Rate limit exceeded"},
+                     status=429
+                 )
+
     serializer = RegisterSerializer(data=request.data)
 
     if not serializer.is_valid():
@@ -277,6 +322,12 @@ def create_api_key(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def list_api_keys(request):
+
+    if not allow_user_request(request, 120):
+            return Response(
+                {"detail": "Rate limit exceeded"},
+                status=429
+            )
 
     user = request.user
 
